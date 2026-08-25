@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa General de Línea - Parada Técnica</title>
+<style>
+  :root {
+    --bg-dark: #0f1419;
+    --panel-dark: #161c24;
+    --text-main: #e8ecef;
+    --text-muted: #8a97a3;
+    --accent: #3fa7d6;
+    --accent-hover: #e8622c;
+    --border: #2c3540;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* --- HEADER --- */
+  header {
+    height: 60px;
+    padding: 0 24px;
+    background-color: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 100;
+  }
+
+  header .title-area h1 {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 700;
+  }
+
+  header .title-area p {
+    margin: 2px 0 0;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  header .hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: #06090c;
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 4px;
+  }
+
+  /* --- VISOR DEL PLANO --- */
+  #map-viewer {
+    flex: 1;
+    width: 100%;
+    position: relative;
+    overflow: auto;
+    background-color: #ffffff;
+  }
+
+  #plano-container {
+    position: relative;
+    display: inline-block;
+    min-width: 100%;
+  }
+
+  #plano-img {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-width: 1200px;
+  }
+
+  /* --- PUNTOS Y ETIQUETAS --- */
+  .hotspot {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    margin-left: -20px;
+    margin-top: -20px;
+    border-radius: 50%;
+    border: 3px solid var(--accent);
+    box-shadow: 0 0 0 5px rgba(63,167,214,0.2);
+    cursor: grab;
+    z-index: 5;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+
+  .hotspot:hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 8px rgba(63,167,214,0.3);
+  }
+
+  .hotspot.dragging {
+    cursor: grabbing;
+  }
+
+  .hotspot-label {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 6px;
+    background: var(--panel-dark);
+    border: 1px solid var(--accent);
+    color: var(--text-main);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }
+
+  /* --- PANEL FLOTANTE --- */
+  #control-panel {
+    position: fixed;
+    top: 80px;
+    right: 24px;
+    background-color: var(--panel-dark);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    width: 280px;
+    z-index: 50;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  }
+
+  #btn-back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    background-color: rgba(255, 255, 255, 0.06);
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    padding: 9px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    transition: background 0.2s, border-color 0.2s;
+  }
+
+  #btn-back:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    border-color: #4c566a;
+  }
+
+  #btn-back span { margin-right: 8px; font-size: 13px; }
+
+  .machine-legend {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .legend-item:hover {
+    color: var(--text-main);
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--accent);
+    margin-right: 8px;
+  }
+
+  .reset-btn {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 10px;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .reset-btn:hover { color: #e8622c; }
+
+  .save-hint {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    font-size: 11px;
+    color: #4caf50;
+    background: var(--panel-dark);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 6px;
+    opacity: 0;
+    transition: opacity .3s ease;
+    pointer-events: none;
+    z-index: 50;
+  }
+  .save-hint.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-area">
+    <h1>Mapa General de Línea &mdash; Parada Técnica</h1>
+    <p>Selecciona una máquina para abrir su mapa interactivo de despiece y recambios</p>
+  </div>
+  <div class="hint">Arrastra los puntos para ajustarlos. Se guardarán automáticamente.</div>
+</header>
+
+<div id="map-viewer">
+  <div id="plano-container">
+    <img src="linea_plano.png" alt="Plano técnico de la línea" id="plano-img" draggable="false">
+
+    <!-- HOTSPOTS (Coordenadas ajustadas a la imagen dada) -->
+    <div class="hotspot" data-id="paletizador" style="left: 30.2%; top: 46.5%;">
+      <div class="hotspot-label">Paletizador</div>
+    </div>
+
+    <div class="hotspot" data-id="kister2" style="left: 50.8%; top: 44.5%;">
+      <div class="hotspot-label">Kister 2</div>
+    </div>
+
+    <div class="hotspot" data-id="kister1" style="left: 57.8%; top: 38.0%;">
+      <div class="hotspot-label">Kister 1</div>
+    </div>
+
+    <div class="hotspot" data-id="innofill" style="left: 76.2%; top: 70.8%;">
+      <div class="hotspot-label">Innofill</div>
+    </div>
+  </div>
+
+  <!-- PANEL FLOTANTE -->
+  <div id="control-panel">
+    <button id="btn-back" onclick="volverAlPlanoGeneral()">
+      <span>&#x21BA;</span> VOLVER AL PLANO GENERAL
+    </button>
+    <div class="machine-legend">
+      <div class="legend-item" onclick="openMachine('paletizador')"><span class="legend-dot"></span>Paletizador</div>
+      <div class="legend-item" onclick="openMachine('kister2')"><span class="legend-dot"></span>Kister 2</div>
+      <div class="legend-item" onclick="openMachine('kister1')"><span class="legend-dot"></span>Kister 1</div>
+      <div class="legend-item" onclick="openMachine('innofill')"><span class="legend-dot"></span>Innofill</div>
+    </div>
+    <button class="reset-btn" onclick="resetearPosiciones()">Restablecer posiciones originales</button>
+  </div>
+</div>
+
+<div class="save-hint" id="saveHint">&check; Posición guardada</div>
+
+<script>
+  const machineFiles = {
+  paletizador: 'paletizador.html',
+  kister2:     'kister2.html',
+  kister1:     'kister1.html',
+  innofill:    'innofill.html'
+};
+
+  const planoContainer = document.getElementById('plano-container');
+  const saveHint = document.getElementById('saveHint');
+
+  // --- CARGAR POSICIONES GUARDADAS EN EL NAVEGADOR ---
+  function cargarPosiciones() {
+    const saved = localStorage.getItem('posiciones_maquinas_v2');
+    if (saved) {
+      const pos = JSON.parse(saved);
+      document.querySelectorAll('.hotspot').forEach(hs => {
+        const id = hs.dataset.id;
+        if (pos[id]) {
+          hs.style.left = pos[id].left;
+          hs.style.top = pos[id].top;
+        }
+      });
+    }
+  }
+
+  // --- GUARDAR POSICIONES ---
+  function guardarPosiciones() {
+    const pos = {};
+    document.querySelectorAll('.hotspot').forEach(hs => {
+      pos[hs.dataset.id] = {
+        left: hs.style.left,
+        top: hs.style.top
+      };
+    });
+    localStorage.setItem('posiciones_maquinas_v2', JSON.stringify(pos));
+    
+    saveHint.classList.add('show');
+    setTimeout(() => saveHint.classList.remove('show'), 1800);
+  }
+
+  function resetearPosiciones() {
+    localStorage.removeItem('posiciones_maquinas_v2');
+    location.reload();
+  }
+
+  function openMachine(id) {
+    const file = machineFiles[id];
+    if (file) {
+      window.location.href = file;
+    } else {
+      alert(`No se encontró la ruta para: ${id}`);
+    }
+  }
+
+  function volverAlPlanoGeneral() {
+    const viewer = document.getElementById('map-viewer');
+    viewer.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+  }
+
+  // --- LÓGICA DE ARRASTRE ---
+  let dragTarget = null;
+  let dragMoved = false;
+  let dragStartX = 0, dragStartY = 0;
+
+  document.querySelectorAll('.hotspot').forEach(hs => {
+    hs.addEventListener('mousedown', (e) => {
+      dragTarget = hs;
+      dragMoved = false;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      hs.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    hs.addEventListener('touchstart', (e) => {
+      dragTarget = hs;
+      dragMoved = false;
+      const t = e.touches[0];
+      dragStartX = t.clientX;
+      dragStartY = t.clientY;
+      hs.classList.add('dragging');
+    }, { passive: true });
+  });
+
+  function moveHotspot(clientX, clientY) {
+    if (!dragTarget) return;
+    const dx = Math.abs(clientX - dragStartX);
+    const dy = Math.abs(clientY - dragStartY);
+    if (dx > 4 || dy > 4) dragMoved = true;
+
+    const rect = planoContainer.getBoundingClientRect();
+    let leftPct = ((clientX - rect.left) / rect.width) * 100;
+    let topPct = ((clientY - rect.top) / rect.height) * 100;
+    leftPct = Math.max(0, Math.min(100, leftPct));
+    topPct = Math.max(0, Math.min(100, topPct));
+    dragTarget.style.left = leftPct.toFixed(1) + '%';
+    dragTarget.style.top = topPct.toFixed(1) + '%';
+  }
+
+  window.addEventListener('mousemove', (e) => moveHotspot(e.clientX, e.clientY));
+  window.addEventListener('touchmove', (e) => {
+    if (dragTarget && e.touches[0]) moveHotspot(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+
+  function endDrag() {
+    if (dragTarget) {
+      dragTarget.classList.remove('dragging');
+      if (dragMoved) {
+        guardarPosiciones();
+      } else {
+        openMachine(dragTarget.dataset.id);
+      }
+    }
+    dragTarget = null;
+  }
+
+  window.addEventListener('mouseup', endDrag);
+  window.addEventListener('touchend', endDrag);
+
+  // Carga las posiciones iniciales guardadas si existen
+  cargarPosiciones();
+</script>
+
+</body>
+</html>
